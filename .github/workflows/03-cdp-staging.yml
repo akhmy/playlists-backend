@@ -28,5 +28,5 @@ jobs:
           key: ${{secrets.STAGING_KEY}}
           port: ${{secrets.STAGING_PORT}}
           script: |
-            docker compose -f docker-compose.staging.yml pull
-            docker compose -f docker-compose.staging.yml up -d
+            docker compose -f compose.staging.yml pull
+            docker compose -f compose.staging.yml up -d
