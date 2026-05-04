@@ -26,6 +26,7 @@ jobs:
           host: ${{secrets.STAGING_HOST}}
           username: ${{secrets.STAGING_USER}}
           key: ${{secrets.STAGING_KEY}}
+          port: ${{secrets.STAGING_PORT}}
           script: |
             docker compose -f docker-compose.staging.yml pull
             docker compose -f docker-compose.staging.yml up -d
