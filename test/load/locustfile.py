@@ -55,7 +55,7 @@ class AuthenticatedUser(HttpUser):
 
         reg = self.client.post(
             "/api/v1/auth/users/",
-            json={"username": self._username, "password": self._password, "email": f"{self._username}@test.com"},
+            json={"username": self._username, "password": self._password, "re_password": self._password, "email": f"{self._username}@test.com"},
         )
         if not reg.ok:
             return
