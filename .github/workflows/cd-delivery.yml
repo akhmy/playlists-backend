@@ -1,0 +1,40 @@
+name: CD Delivery
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/playlists-backend
+  TAG: ${{ github.sha }}
+
+jobs:
+  build-image:
+    name: Build image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: docker build -t ${{ env.IMAGE }} ${{ env.TAG }}
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }} ${{ env.TAG }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+
+      - name: Push image
+        run: docker push ${{ env.IMAGE }} ${{ env.TAG }}
