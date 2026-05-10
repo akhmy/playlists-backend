@@ -45,6 +45,8 @@ jobs:
     permissions:
       packages: read
     steps:
+      - uses: actions/checkout@v4
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -54,9 +56,6 @@ jobs:
 
       - name: Start
         run: docker compose -f test/integration/compose.test.yml up -d
-        env:
-          IMAGE: ${{ env.IMAGE }}
-          TAG: ${{ env.TAG }}
 
       - name: Wait for backend
         run: |
