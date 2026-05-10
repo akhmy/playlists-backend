@@ -130,3 +130,24 @@ jobs:
           min-versions-to-keep: 0
           delete-only-untagged-versions: false
           ignore-versions: "^latest$"
+
+  promote:
+    name: Promote successful image to latest
+    runs-on: ubuntu-24.04
+    needs: [integration-test, load-test]
+    if: success()
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag as latest
+        run: |
+          docker pull ${{ env.IMAGE }} ${{ env.TAG }}
+          docker tag ${{ env.IMAGE }}:${{ env.TAG }} ${{ env.IMAGE }}:latest
+          docker push ${{ env.IMAGE }}:latest
