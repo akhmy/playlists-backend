@@ -12,7 +12,7 @@ services:
       DB_NAME: playlists_db
       DB_USER: playlists_user
       DB_PASSWORD: playlists
-      ALLOWED_HOSTS: localhost
+      ALLOWED_HOSTS: localhost,backend
       DEBUG: 'False'
       DJANGO_SUPERUSER_USERNAME: admin
       DJANGO_SUPERUSER_PASSWORD: admin
