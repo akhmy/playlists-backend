@@ -9,7 +9,7 @@ env:
   TAG: ${{ github.sha }}
 
 jobs:
-  build-image:
+  push:
     name: Build, scan and push image
     runs-on: ubuntu-24.04
     permissions:
@@ -38,3 +38,38 @@ jobs:
 
       - name: Push image
         run: docker push ${{ env.IMAGE }}:${{ env.TAG }}
+
+  integration-test:
+    name: Integration testing
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: read
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start
+        run: docker compose -f test/integration/compose.test.yml up -d
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          TAG: ${{ env.TAG }}
+
+      - name: Wait for backend
+        run: |
+          timeout 30 bash -c \
+            'until curl -sf 'http://localhost:8000/api/v1/playlists/; do sleep 2; done'
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      - name: Run Newman
+        run: newman run test/integration/postman-collection.json \
+          --env-var base_url=http://localhost:8000/api/v1
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f compose.test.yml down -v
