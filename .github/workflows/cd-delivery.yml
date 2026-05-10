@@ -148,6 +148,6 @@ jobs:
 
       - name: Retag as latest
         run: |
-          docker pull ${{ env.IMAGE }} ${{ env.TAG }}
+          docker pull ${{ env.IMAGE }}:${{ env.TAG }}
           docker tag ${{ env.IMAGE }}:${{ env.TAG }} ${{ env.IMAGE }}:latest
           docker push ${{ env.IMAGE }}:latest
