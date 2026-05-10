@@ -1,0 +1,66 @@
+services:
+  backend:
+    image: ${IMAGE}:${TAG}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: playlists_db
+      DB_USER: playlists_user
+      DB_PASSWORD: playlists
+      ALLOWED_HOSTS: localhost,backend
+      DEBUG: 'False'
+      DJANGO_SUPERUSER_USERNAME: admin
+      DJANGO_SUPERUSER_PASSWORD: admin
+      DJANGO_SUPERUSER_EMAIL: admin@example.com
+    entrypoint:
+      - sh
+      - -c
+      - |
+        python manage.py migrate &&
+        python manage.py createsuperuser --noinput &&
+        python manage.py seed_genres &&
+        python manage.py seed_tracks &&
+        python manage.py seed_playlists &&
+        gunicorn config.wsgi:application --bind 0:8000 --workers 3
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/playlists/')\"" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: playlists_db
+      POSTGRES_USER: playlists_user
+      POSTGRES_PASSWORD: playlists
+    healthcheck:
+      test: [ "CMD-SHELL", "psql -U playlists_user -d playlists_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  locust:
+    image: locustio/locust:2.32.3
+    user: root
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./:/mnt/locust
+    command: >
+      -f /mnt/locust/locustfile.py
+      --host http://backend:8000
+      --headless
+      --users ${LOCUST_USERS:-10}
+      --spawn-rate ${LOCUST_SPAWN_RATE:-2}
+      --run-time ${LOCUST_RUN_TIME:-60s}
+      --html /mnt/locust/report.html
+      --exit-code-on-error 1

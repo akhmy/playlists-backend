@@ -9,7 +9,7 @@ env:
   TAG: ${{ github.sha }}
 
 jobs:
-  build-image:
+  push:
     name: Build, scan and push image
     runs-on: ubuntu-24.04
     permissions:
@@ -38,3 +38,116 @@ jobs:
 
       - name: Push image
         run: docker push ${{ env.IMAGE }}:${{ env.TAG }}
+
+  integration-test:
+    needs: push
+    name: Integration testing
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose up
+        run: docker compose -f test/integration/compose.test.yml up -d
+
+      - name: Wait for backend
+        run: |
+          timeout 30 bash -c \
+            'until curl -sf http://localhost:8000/api/v1/playlists/; do sleep 2; done'
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      - name: Run Newman
+        run: newman run test/integration/postman-collection.json \
+          --env-var base_url=http://localhost:8000/api/v1
+
+      - name: Compose down
+        if: always()
+        run: docker compose -f test/integration/compose.test.yml down -v
+
+  load-test:
+    needs: push
+    name: Load testing
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Locust
+        run: |
+          docker compose -f test/load/compose.test.yml up \
+            --abort-on-container-exit \
+            --exit-code-from locust
+
+      - name: Copy report
+        if: always()
+        run: docker cp $(docker compose -f test/load/compose.test.yml ps -q locust):/mnt/locust/report.html test/load/report.html 2>/dev/null || true
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-report
+          path: test/load/report.html
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f test/load/compose.test.yml down -v
+
+  cleanup:
+    name: Cleanup on failure
+    runs-on: ubuntu-24.04
+    needs: [integration-test, load-test]
+    if: failure()
+    permissions:
+      packages: write
+    steps:
+      - name: Delete SHA image
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: playlists-backend
+          package-type: container
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: false
+          ignore-versions: "^latest$"
+
+  promote:
+    name: Promote successful image to latest
+    runs-on: ubuntu-24.04
+    needs: [integration-test, load-test]
+    if: success()
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag as latest
+        run: |
+          docker pull ${{ env.IMAGE }}:${{ env.TAG }}
+          docker tag ${{ env.IMAGE }}:${{ env.TAG }} ${{ env.IMAGE }}:latest
+          docker push ${{ env.IMAGE }}:latest
