@@ -3,12 +3,13 @@ name: CI
 on:
   push:
     branches: ["**"]
-  pull_request:
-    branches: ["**"]
+
+permissions:
+  contents: read
 
 jobs:
   lint:
-    name: Lint
+    name: Linting
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -18,43 +19,53 @@ jobs:
           python-version: "3.13"
 
       - name: Install ruff
-        run: pip install ruff
+        run: python3 -m pip install ruff==0.4.4
 
       - name: Run ruff
         run: ruff check .
 
-  sec:
-    name: Security Check
+  deps-audit:
+    name: Dependencies audit
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - name: Install bandit and pip-audit
-        run: pip install bandit pip-audit
+      - name: Install pip-audit
+        run: python3 -m pip install pip-audit=2.10.0
 
-      - name: Bandit (SAST)
-        run: bandit -r apps/ -ll
-
-      - name: pip-audit (dependency CVE scan)
+      - name: Run pip-audit
         run: pip-audit -r requirements.txt
 
-  test:
-    name: Test
+  sast:
+    name: SAST
     runs-on: ubuntu-24.04
-    needs: [lint, sec]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
+      - name: Install Bandit
+        run: python3 -m pip install bandit==1.7.9
+
+      - name: Run Bandit
+        run: bandit -r config/ apps/ -ll && bandit manage.py -ll
+
+  unit-test:
+    name: Unit testing
+    runs-on: ubuntu-24.04
+    needs: [lint, deps-audit, sast]
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: python3 -m pip install -r requirements.txt
 
       - name: Run pytest
         run: pytest --tb=short -q
