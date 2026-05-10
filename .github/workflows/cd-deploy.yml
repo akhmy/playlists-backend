@@ -1,0 +1,37 @@
+name: CD Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to prod
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_KEY }}
+          port: ${{ secrets.PROD_PORT }}
+          script: |
+            set -e
+            cd /opt/playlists
+
+            PREV_TAG=$(docker inspect --format='{{index .Config.Image}}' backend 2>/dev/null || echo "")
+
+            docker compose pull
+            docker compose up -d
+
+            sleep 10
+            if ! curl -sf http://localhost:8000/api/v1/playlists; then
+              echo "Healthcheck failed, rolling back..."
+
+              if [ -n "$PREV_TAG" ]; then
+                docker pull "$PREV_TAG"
+                IMAGE_TAG="$PREV_TAG" docker compose up -d
+              fi
+              exit 1
+            fi
