@@ -47,6 +47,7 @@ services:
 
   locust:
     image: locustio/locust:2.32.3
+    user: root
     depends_on:
       backend:
         condition: service_healthy

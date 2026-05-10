@@ -112,3 +112,21 @@ jobs:
       - name: Teardown
         if: always()
         run: docker compose -f test/load/compose.test.yml down -v
+
+  cleanup:
+    name: Cleanup on failure
+    runs-on: ubuntu-24.04
+    needs: [integration-test, load-test]
+    if: failure()
+    permissions:
+      packages: write
+    steps:
+      - name: Delete SHA image
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: playlists-backend
+          package-type: container
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: false
+          ignore-versions: "^latest$"
