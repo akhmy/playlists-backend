@@ -8,10 +8,11 @@ class AnonymousUser(HttpUser):
 
     def on_start(self):
         resp = self.client.get("/api/v1/playlists/").json()
-        self._playlist_ids = [p["id"] for p in resp.get("results", [])] or [1]
+        self._playlist_ids = [p["id"] for p in resp.get("results", [])]
 
         resp = self.client.get("/api/v1/tracks/").json()
-        self._track_ids = [t["id"] for t in resp.get("results", resp if isinstance(resp, list) else [])] or [1]
+        results = resp if isinstance(resp, list) else resp.get("results", [])
+        self._track_ids = [t["id"] for t in results]
 
     @task(4)
     def list_playlists(self):
@@ -23,7 +24,8 @@ class AnonymousUser(HttpUser):
 
     @task(2)
     def get_playlist(self):
-        self.client.get(f"/api/v1/playlists/{random.choice(self._playlist_ids)}/")
+        if self._playlist_ids:
+            self.client.get(f"/api/v1/playlists/{random.choice(self._playlist_ids)}/")
 
     @task(2)
     def list_tracks(self):
@@ -36,7 +38,8 @@ class AnonymousUser(HttpUser):
 
     @task(1)
     def get_track(self):
-        self.client.get(f"/api/v1/tracks/{random.choice(self._track_ids)}/")
+        if self._track_ids:
+            self.client.get(f"/api/v1/tracks/{random.choice(self._track_ids)}/")
 
 
 class AuthenticatedUser(HttpUser):
@@ -44,24 +47,32 @@ class AuthenticatedUser(HttpUser):
     wait_time = between(1, 5)
 
     def on_start(self):
-        uid = random.randint(1, 100000)
+        uid = random.randint(1, 1_000_000)
         self._username = f"loaduser_{uid}"
-        self._password = "loadpass123"
+        self._password = f"Ld#{uid}!xQ9"
+        self._authenticated = False
+        self._playlist_ids = []
 
-        self.client.post(
+        reg = self.client.post(
             "/api/v1/auth/users/",
             json={"username": self._username, "password": self._password, "email": f"{self._username}@test.com"},
         )
+        if not reg.ok:
+            return
 
         resp = self.client.post(
             "/api/v1/auth/jwt/create/",
             json={"username": self._username, "password": self._password},
         ).json()
-        token = resp.get("access", "")
+        token = resp.get("access")
+        if not token:
+            return
+
         self.client.headers.update({"Authorization": f"Bearer {token}"})
+        self._authenticated = True
 
         resp = self.client.get("/api/v1/playlists/").json()
-        self._playlist_ids = [p["id"] for p in resp.get("results", [])] or [1]
+        self._playlist_ids = [p["id"] for p in resp.get("results", [])]
 
     @task(3)
     def list_playlists(self):
@@ -69,15 +80,18 @@ class AuthenticatedUser(HttpUser):
 
     @task(2)
     def get_playlist(self):
-        self.client.get(f"/api/v1/playlists/{random.choice(self._playlist_ids)}/")
+        if self._playlist_ids:
+            self.client.get(f"/api/v1/playlists/{random.choice(self._playlist_ids)}/")
 
     @task(2)
     def upvote_playlist(self):
-        self.client.patch(f"/api/v1/playlists/{random.choice(self._playlist_ids)}/upvote/")
+        if self._authenticated and self._playlist_ids:
+            self.client.patch(f"/api/v1/playlists/{random.choice(self._playlist_ids)}/upvote/")
 
     @task(1)
     def create_playlist(self):
-        self.client.post(
-            "/api/v1/playlists/",
-            json={"name": f"Load playlist {random.randint(1, 9999)}", "description": "", "tracks": []},
-        )
+        if self._authenticated:
+            self.client.post(
+                "/api/v1/playlists/",
+                json={"name": f"Load playlist {random.randint(1, 9999)}", "description": "", "tracks": []},
+            )
