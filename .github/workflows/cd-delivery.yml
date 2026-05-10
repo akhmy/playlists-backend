@@ -44,6 +44,7 @@ jobs:
     name: Integration testing
     runs-on: ubuntu-24.04
     permissions:
+      contents: read
       packages: read
     steps:
       - uses: actions/checkout@v4
@@ -55,7 +56,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Start
+      - name: Compose up
         run: docker compose -f test/integration/compose.test.yml up -d
 
       - name: Wait for backend
@@ -70,6 +71,53 @@ jobs:
         run: newman run test/integration/postman-collection.json \
           --env-var base_url=http://localhost:8000/api/v1
 
-      - name: Teardown
+      - name: Compose down
         if: always()
         run: docker compose -f test/integration/compose.test.yml down -v
+
+  load-test:
+    needs: push
+    name: Load testing
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Locust
+        run: pip install locust
+
+      - name: Compose up
+        run: docker compose -f test/integration/compose.test.yml up -d
+
+      - name: Wait for backend
+        run: |
+          timeout 30 bash -c \
+            'until curl -sf http://localhost:8000/api/v1/playlists/; do sleep 2; done'
+
+      - name: Run Locust
+        run: |
+          locust -f test/load/locustfile.py \
+          --headless \
+          --users 50 \
+          --spawn-rate 10 \
+          --run-time 1m \
+          --host http://localhost:8000 \
+          --html test/load/report.html
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-report
+          path: test/load/report.html
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f test/load/compose.test.yml down -v
