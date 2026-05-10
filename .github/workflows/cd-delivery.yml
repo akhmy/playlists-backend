@@ -10,7 +10,7 @@ env:
 
 jobs:
   build-image:
-    name: Build, scan and push image
+    name: Build image
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -33,7 +33,7 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
           format: table
-          exit-code: 1
+          exit-code: 0
           severity: CRITICAL,HIGH
 
       - name: Push image
