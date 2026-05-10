@@ -81,6 +81,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -91,28 +92,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Locust
-        run: pip install locust==2.32.3
-
-      - name: Compose up
-        run: docker compose -f test/integration/compose.test.yml up -d
-
-      - name: Wait for backend
-        run: |
-          timeout 30 bash -c \
-            'until curl -sf http://localhost:8000/api/v1/playlists/; do sleep 2; done'
-
       - name: Run Locust
         run: |
-          locust -f test/load/locustfile.py \
-          --headless \
-          --users 50 \
-          --spawn-rate 10 \
-          --run-time 1m \
-          --host http://localhost:8000 \
-          --html test/load/report.html
+          docker compose -f test/load/compose.test.yml up \
+            --abort-on-container-exit \
+            --exit-code-from locust
+
+      - name: Copy report
+        if: always()
+        run: docker cp $(docker compose -f test/load/compose.test.yml ps -q locust):/mnt/locust/report.html test/load/report.html 2>/dev/null || true
 
       - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: locust-report
